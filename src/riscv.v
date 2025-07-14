@@ -1,0 +1,157 @@
+// -----------------------------------------------------------------------------
+// Kleine-RISCV-PD: A Minimal Public Domain RISC-V RV32I Implementation in Verilog
+// Inspired by https://github.com/rolandbernard/kleine-riscv
+// Author: ChatGPT, 2025. Released to the public domain. No warranty.
+// -----------------------------------------------------------------------------
+
+// Notes:
+//
+//    This is a minimal, single-cycle, public domain Verilog RISC-V RV32I core, inspired by the linked "kleine-riscv" project.
+//    It does not include CSR, exceptions, interrupts, or advanced features.
+//    All register 0 writes are ignored (hardwired to zero).
+//    LUI/AUIPC are supported.
+//    Load/store mask logic is simplified; adjust dmem_wmask as needed for your RAM interface.
+//    For educational use—suitable as a starting point for more complete designs!
+
+
+module riscv (
+    input wire         clk,        // Clock
+    input wire         rst,        // Reset (synchronous, active high)
+    output wire [31:0] imem_addr,  // Instruction memory address
+    input  wire [31:0] imem_data,  // Instruction memory data
+    output wire [31:0] dmem_addr,  // Data memory address
+    input  wire [31:0] dmem_rdata, // Data memory read data
+    output wire [31:0] dmem_wdata, // Data memory write data
+    output wire [3:0]  dmem_wmask, // Data memory write mask (byte-enable)
+    output wire        dmem_we     // Data memory write enable
+);
+
+    // ==== Registers ====
+    reg [31:0] pc;
+    reg [31:0] regfile [0:31];
+
+    // ==== Instruction Decode Wires ====
+    wire [6:0]  opcode = imem_data[6:0];
+    wire [4:0]  rd     = imem_data[11:7];
+    wire [2:0]  funct3 = imem_data[14:12];
+    wire [4:0]  rs1    = imem_data[19:15];
+    wire [4:0]  rs2    = imem_data[24:20];
+    wire [6:0]  funct7 = imem_data[31:25];
+
+    // Immediate decode
+    wire [31:0] imm_i = {{20{imem_data[31]}}, imem_data[31:20]};
+    wire [31:0] imm_s = {{20{imem_data[31]}}, imem_data[31:25], imem_data[11:7]};
+    wire [31:0] imm_b = {{19{imem_data[31]}}, imem_data[31], imem_data[7],
+                         imem_data[30:25], imem_data[11:8], 1'b0};
+    wire [31:0] imm_u = {imem_data[31:12], 12'b0};
+    wire [31:0] imm_j = {{11{imem_data[31]}}, imem_data[31], imem_data[19:12],
+                         imem_data[20], imem_data[30:21], 1'b0};
+
+    // ==== Main Register Read ====
+    wire [31:0] rv1 = (rs1 == 0) ? 32'b0 : regfile[rs1];
+    wire [31:0] rv2 = (rs2 == 0) ? 32'b0 : regfile[rs2];
+
+    // ==== ALU ====
+    reg [31:0] alu_out;
+    always @* begin
+        case (opcode)
+            7'b0110011: begin // R-type
+                case ({funct7, funct3})
+                    {7'b0000000,3'b000}: alu_out = rv1 + rv2; // ADD
+                    {7'b0100000,3'b000}: alu_out = rv1 - rv2; // SUB
+                    {7'b0000000,3'b001}: alu_out = rv1 << rv2[4:0]; // SLL
+                    {7'b0000000,3'b010}: alu_out = ($signed(rv1) < $signed(rv2)) ? 32'b1 : 32'b0; // SLT
+                    {7'b0000000,3'b011}: alu_out = (rv1 < rv2) ? 32'b1 : 32'b0; // SLTU
+                    {7'b0000000,3'b100}: alu_out = rv1 ^ rv2; // XOR
+                    {7'b0000000,3'b101}: alu_out = rv1 >> rv2[4:0]; // SRL
+                    {7'b0100000,3'b101}: alu_out = $signed(rv1) >>> rv2[4:0]; // SRA
+                    {7'b0000000,3'b110}: alu_out = rv1 | rv2; // OR
+                    {7'b0000000,3'b111}: alu_out = rv1 & rv2; // AND
+                    default: alu_out = 32'b0;
+                endcase
+            end
+            7'b0010011: begin // I-type ALU
+                case (funct3)
+                    3'b000: alu_out = rv1 + imm_i; // ADDI
+                    3'b010: alu_out = ($signed(rv1) < $signed(imm_i)) ? 32'b1 : 32'b0; // SLTI
+                    3'b011: alu_out = (rv1 < imm_i) ? 32'b1 : 32'b0; // SLTIU
+                    3'b100: alu_out = rv1 ^ imm_i; // XORI
+                    3'b110: alu_out = rv1 | imm_i; // ORI
+                    3'b111: alu_out = rv1 & imm_i; // ANDI
+                    3'b001: alu_out = rv1 << imem_data[24:20]; // SLLI
+                    3'b101: alu_out = (funct7==7'b0000000) ? rv1 >> imem_data[24:20] : $signed(rv1) >>> imem_data[24:20]; // SRLI/SRAI
+                    default: alu_out = 32'b0;
+                endcase
+            end
+            default: alu_out = 32'b0;
+        endcase
+    end
+
+    // ==== Next-PC Calculation ====
+    wire take_branch = (
+        (opcode == 7'b1100011) && (
+            (funct3 == 3'b000 && rv1 == rv2) || // BEQ
+            (funct3 == 3'b001 && rv1 != rv2) || // BNE
+            (funct3 == 3'b100 && $signed(rv1) < $signed(rv2)) || // BLT
+            (funct3 == 3'b101 && $signed(rv1) >= $signed(rv2)) || // BGE
+            (funct3 == 3'b110 && rv1 < rv2) || // BLTU
+            (funct3 == 3'b111 && rv1 >= rv2)    // BGEU
+        )
+    );
+    wire is_jal  = (opcode == 7'b1101111);
+    wire is_jalr = (opcode == 7'b1100111);
+
+    wire [31:0] next_pc = is_jal  ? pc + imm_j :
+                          is_jalr ? ((rv1 + imm_i) & ~1) :
+                          (take_branch ? pc + imm_b : pc + 4);
+
+    // ==== Write-back Data ====
+    wire [31:0] wb_data = (
+        (opcode == 7'b0000011) ? dmem_rdata : // Load
+        (is_jal || is_jalr)    ? pc + 4 :
+        alu_out
+    );
+    wire wb_enable = (
+        (opcode == 7'b0110011) || // R-type
+        (opcode == 7'b0010011) || // I-type ALU
+        (opcode == 7'b0000011) || // Loads
+        (is_jal || is_jalr)   || // Jumps
+        (opcode == 7'b0110111) || // LUI
+        (opcode == 7'b0010111)    // AUIPC
+    );
+
+    // ==== Data Memory Access ====
+    assign dmem_addr  = rv1 + imm_s;
+    assign dmem_wdata = rv2;
+    assign dmem_wmask = (opcode == 7'b0100011) ? (
+        (funct3 == 3'b000) ? (4'b0001 << dmem_addr[1:0]) : // SB
+        (funct3 == 3'b001) ? (4'b0011 << dmem_addr[1:0]) : // SH
+        4'b1111 // SW
+    ) : 4'b0000;
+    assign dmem_we    = (opcode == 7'b0100011);
+
+    // ==== Instruction Memory ====
+    assign imem_addr = pc;
+
+    // ==== Main Sequential Logic ====
+    integer i;
+    always @(posedge clk) begin
+        if (rst) begin
+            pc <= 0;
+            for (i = 0; i < 32; i = i+1) regfile[i] <= 0;
+        end else begin
+            // Write-back
+            if (wb_enable && rd != 0) begin
+                regfile[rd] <= (opcode == 7'b0110111) ? imm_u : // LUI
+                               (opcode == 7'b0010111) ? pc + imm_u : // AUIPC
+                               wb_data;
+            end
+            // PC Update
+            pc <= (opcode == 7'b1100011 && take_branch) ? (pc + imm_b) :
+                  is_jal ? (pc + imm_j) :
+                  is_jalr ? ((rv1 + imm_i) & ~1) :
+                  (pc + 4);
+        end
+    end
+
+endmodule
