@@ -27,49 +27,34 @@ module riscv (
 );
 
     // ==== Registers ====
-reg [31:0] pc;
-reg [31:0] regfile [0:31];
+    reg [31:0] pc;
+    reg [31:0] regfile [0:31];
 
     // ==== Instruction Decode Wires ====
-wire [6:0]  opcode;
-wire [4:0]  rd;
-wire [2:0]  funct3;
-wire [4:0]  rs1;
-wire [4:0]  rs2;
-wire [6:0]  funct7;
-assign opcode = I_imem_data[6:0];
-assign rd     = I_imem_data[11:7];
-assign funct3 = I_imem_data[14:12];
-assign rs1    = I_imem_data[19:15];
-assign rs2    = I_imem_data[24:20];
-assign funct7 = I_imem_data[31:25];
-
+    wire [6:0]  opcode = I_imem_data[6:0];
+    wire [4:0]  rd     = I_imem_data[11:7];
+    wire [2:0]  funct3 = I_imem_data[14:12];
+    wire [4:0]  rs1    = I_imem_data[19:15];
+    wire [4:0]  rs2    = I_imem_data[24:20];
+    wire [6:0]  funct7 = I_imem_data[31:25];
 
     // Immediate decode
-wire [31:0] imm_i;
-wire [31:0] imm_s;
-wire [31:0] imm_b;
-wire [31:0] imm_u;
-wire [31:0] imm_j;
-assign imm_i = {{20{I_imem_data[31]}}, I_imem_data[31:20]};
-assign imm_s = {{20{I_imem_data[31]}}, I_imem_data[31:25], I_imem_data[11:7]};
-assign imm_b = {{19{I_imem_data[31]}}, I_imem_data[31], I_imem_data[7],
+    wire [31:0] imm_i = {{20{I_imem_data[31]}}, I_imem_data[31:20]};
+    wire [31:0] imm_s = {{20{I_imem_data[31]}}, I_imem_data[31:25], I_imem_data[11:7]};
+    wire [31:0] imm_b = {{19{I_imem_data[31]}}, I_imem_data[31], I_imem_data[7],
                          I_imem_data[30:25], I_imem_data[11:8], 1'b0};
-assign imm_u = {I_imem_data[31:12], 12'b0};
-assign imm_j = {{11{I_imem_data[31]}}, I_imem_data[31], 
+    wire [31:0] imm_u = {I_imem_data[31:12], 12'b0};
+    wire [31:0] imm_j = {{11{I_imem_data[31]}}, I_imem_data[31], 
 	    		I_imem_data[19:12],
                          I_imem_data[20], I_imem_data[30:21], 1'b0};
 
-
     // ==== Main Register Read ====
-wire [31:0] rv1;
-wire [31:0] rv2;
+    wire [31:0] rv1 = (rs1 == 0) ? 32'b0 : regfile[rs1];
+    wire [31:0] rv2 = (rs2 == 0) ? 32'b0 : regfile[rs2];
 
-assign rv1 = (rs1 == 0) ? 32'b0 : regfile[rs1];
-assign rv2 = (rs2 == 0) ? 32'b0 : regfile[rs2];
     // ==== ALU ====
-reg [31:0] alu_out;
-always @* begin
+    reg [31:0] alu_out;
+    always @* begin
         case (opcode)
             7'b0110011: begin // R-type
                 case ({funct7, funct3})
@@ -101,11 +86,10 @@ always @* begin
             end
             default: alu_out = 32'b0;
         endcase
-end
+    end
 
     // ==== Next-PC Calculation ====
-wire take_branch;
-assign take_branch = (
+    wire take_branch = (
         (opcode == 7'b1100011) && (
             (funct3 == 3'b000 && rv1 == rv2) || // BEQ
             (funct3 == 3'b001 && rv1 != rv2) || // BNE
@@ -115,25 +99,20 @@ assign take_branch = (
             (funct3 == 3'b111 && rv1 >= rv2)    // BGEU
         )
     );
-wire is_jal;
-wire is_jalr;
-assign is_jal  = (opcode == 7'b1101111);
-assign is_jalr = (opcode == 7'b1100111);
+    wire is_jal  = (opcode == 7'b1101111);
+    wire is_jalr = (opcode == 7'b1100111);
 
-wire [31:0] next_pc;
-assign next_pc = is_jal  ? pc + imm_j :
+    wire [31:0] next_pc = is_jal  ? pc + imm_j :
                           is_jalr ? ((rv1 + imm_i) & ~1) :
                           (take_branch ? pc + imm_b : pc + 4);
 
     // ==== Write-back Data ====
-wire [31:0] wb_data;
-assign wb_data = (
+    wire [31:0] wb_data = (
         (opcode == 7'b0000011) ? I_dmem_rdata : // Load
         (is_jal || is_jalr)    ? pc + 4 :
         alu_out
     );
-wire wb_enable;
-assign wb_enable = (
+    wire wb_enable = (
         (opcode == 7'b0110011) || // R-type
         (opcode == 7'b0010011) || // I-type ALU
         (opcode == 7'b0000011) || // Loads
@@ -143,21 +122,21 @@ assign wb_enable = (
     );
 
     // ==== Data Memory Access ====
-assign O_dmem_addr  = rv1 + imm_s;
-assign O_dmem_wdata = rv2;
-assign O_dmem_wmask = (opcode == 7'b0100011) ? (
+    assign O_dmem_addr  = rv1 + imm_s;
+    assign O_dmem_wdata = rv2;
+    assign O_dmem_wmask = (opcode == 7'b0100011) ? (
         (funct3 == 3'b000) ? (4'b0001 << O_dmem_addr[1:0]) : // SB
         (funct3 == 3'b001) ? (4'b0011 << O_dmem_addr[1:0]) : // SH
         4'b1111 // SW
     ) : 4'b0000;
-assign O_dmem_we    = (opcode == 7'b0100011);
+    assign O_dmem_we    = (opcode == 7'b0100011);
 
     // ==== Instruction Memory ====
-assign O_imem_addr = pc;
+    assign O_imem_addr = pc;
 
     // ==== Main Sequential Logic ====
-integer i;
-always @(posedge I_clk) begin
+    integer i;
+    always @(posedge I_clk) begin
         if (I_rst) begin
             pc <= 0;
             for (i = 0; i < 32; i = i+1) regfile[i] <= 0;
@@ -173,9 +152,7 @@ always @(posedge I_clk) begin
                   is_jal ? (pc + imm_j) :
                   is_jalr ? ((rv1 + imm_i) & ~1) :
                   (pc + 4);
-	  pc <= pc + 4 + I_imem_data + I_dmem_rdata;
-		
         end
-end
+    end
 
 endmodule

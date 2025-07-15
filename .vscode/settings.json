@@ -19,9 +19,9 @@
         "internal.h": "c"
       },
       	"TOOLCHAIN": "../../oss-cad-suite",
-      	"VLOG_SRC": "../src/riscv.v",
-	"PRFLAGS": "--vopt ccf=../src/gatemate.ccf",
-	"TOP": "riscv",
+      	"VLOG_SRC": "../src/soc.v ../src/riscv.v ../src/data_cache.v ../src/code_cache.v",
+	"PRFLAGS": "--vopt allow-unconstrained --vopt ccf=../src/gatemate.ccf",
+	"TOP": "soc",
       	"EXEPATH": "${config:TOOLCHAIN}/bin",
       	"EXE": "",
       	"YOSYS": "${config:EXEPATH}/yosys",

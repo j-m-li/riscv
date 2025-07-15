@@ -38,7 +38,7 @@
             "label": "make riscv",
             "type": "shell",
             "linux": {
-                "command": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -nomx8 -vlog ${config:TOP}_synth.v'"
+                "command": "echo done"
 	    },
             "osx": {
                 "command": "cc -o edit ${config:edit.src}"
@@ -79,7 +79,8 @@
             "label": "make riscv synth",
             "type": "shell",
             "linux": {
-                "command": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -json ${config:TOP}.json -vlog ${config:TOP}_synth.v; write_verilog -norename -noattr ${config:TOP}_ys.v'"
+                "command1": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -json ${config:TOP}.json -vlog ${config:TOP}_synth.v; write_verilog -norename -noattr ${config:TOP}_ys.v'",
+                "command": "${config:YOSYS} -ql synth.log -p 'read_verilog -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -nomult  -json ${config:TOP}.json ; write_verilog -norename -noattr ${config:TOP}_ys.v'"
 	    },
             "osx": {
                 "command": "cc -o edit ${config:edit.src}"
@@ -91,8 +92,51 @@
                 "cwd": "${workspaceFolder}/build"
             },
 	    "dependsOn": [
+                "make path",
+                "make rom"
+            ]
+        } ,
+       	{
+            "hide": true,
+            "label": "make bin2hex",
+            "type": "shell",
+            "linux": {
+                "command": "cc -o bin2hex.exe ../tools/bin2hex.c"
+            },
+            "osx": {
+                "command": "cc -o foreach.exe ../tools/foreach.c"
+            },
+            "windows": {
+                "command": "cl /Fe: foreach.exe ../tools/foreach.c"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+	    "dependsOn": [
                 "make path"
             ]
+ 
+        },
+        {
+            "hide": true,
+            "label": "make rom",
+            "type": "shell",
+            "linux": {
+                "command": "clang -target riscv32 -march=rv32i -fno-builtin -nostartfiles -nostdlib -Wl,--section-start=.text=0x0 -o rom.elf ../src/rom.S && llvm-objcopy rom.elf -Obinary rom.bin && ./bin2hex.exe rom.bin ../src/rom.hex && llvm-objdump -all rom.elf"
+            },
+            "osx": {
+                "command": "mkdir -p build"
+            },
+            "windows": {
+                "command": "cd build 2>NUL && cd .. || md build"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+	    "dependsOn": [
+                "make bin2hex"
+            ]
+
         },
         {
             "hide": true,
