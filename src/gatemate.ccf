@@ -192,7 +192,7 @@ NET   "O_led"   Loc = "IO_SB_B6";
 #NET   "io_sb_a[7]"   Loc = "IO_SB_A7"; # Clock1
 NET   "I_rst_btn"   Loc = "IO_SB_B7";
 NET   "I_clk"   Loc = "IO_SB_A8" | SCHMITT_TRIGGER=true; # Clock0 
-NET   "O_rst"   Loc = "IO_SB_B8";
+#NET   "O_rst"   Loc = "IO_SB_B8";
 
 # GPIO Bank WB (HyperBus)
 #NET   "hb_cs0_n"     Loc = "IO_WB_B0";

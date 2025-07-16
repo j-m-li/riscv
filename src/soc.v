@@ -2,8 +2,7 @@
 module soc (
 	input	I_clk,     
 	input	I_rst_btn,
-	output	O_led,
-	output	O_rst
+	output	reg O_led
 );
 
 wire clk270, clk180, clk90, usr_ref_out,clk;
@@ -34,52 +33,48 @@ CC_PLL #(
 
 reg [3:0] cnt;
 initial cnt = 0;
+wire rst;
+assign rst = ~cnt[3];
 
 always @(posedge clk)
 begin
 	if (~I_rst_btn) begin
 		cnt <= 4'h0;
+		O_led <= 0;
 	end else if (rst) begin
-		cnt <= cnt + 1;
+		cnt <= cnt + 1'h1;
+		O_led <= 1;
+	end else begin 
+		O_led <= !O_led;
 	end
-	cnt <= cnt + 1;
 end
 
-wire rst;
-assign rst = ~cnt[3];
 
 wire [31:0] imem_addr;
 wire [31:0] imem_data;
-wire imem_stall;
-
-code_cache code (
-	.I_clk(clk),
-	.I_rst(rst),
-	.I_addr(imem_addr),
-	.O_data(imem_data),
-	.O_stall(imem_stall)
-);
 
 wire [31:0] dmem_addr;
 wire [31:0] dmem_rdata;
 wire [31:0] dmem_wdata;
 wire [3:0] dmem_wmask;
 wire dmem_we;
-wire dmem_stall;
+wire mem_stall;
 wire [31:0] wgpio; 
 wire [31:0] rgpio = 0; 
 
-data_cache data (
+cache data (
 	.I_clk(clk),
 	.I_rst(rst),
 	.I_gpio(rgpio),
 	.O_gpio(wgpio),
+	.I_iaddr(imem_addr),
+	.O_idata(imem_data),
 	.I_addr(dmem_addr),
 	.I_data(dmem_wdata),
 	.I_mask(dmem_wmask),
 	.I_we(dmem_we),
 	.O_data(dmem_rdata),
-	.O_stall(dmem_stall)
+	.O_stall(mem_stall)
 );
 
 
@@ -95,8 +90,7 @@ riscv cpu (
 	.O_dmem_we(dmem_we)
 );
 
-assign O_led = (imem_addr == 32'h80000000) ? 1 : 0;
-assign O_rst = rst;
+//assign O_led = (imem_addr < 32'h80000000) ? 1 : 0;
 
 endmodule
 

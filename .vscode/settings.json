@@ -19,7 +19,7 @@
         "internal.h": "c"
       },
       	"TOOLCHAIN": "../../oss-cad-suite",
-      	"VLOG_SRC": "../src/soc.v ../src/riscv.v ../src/data_cache.v ../src/code_cache.v",
+      	"VLOG_SRC": "../src/soc.v ../src/riscv.v ../src/cache.v ",
 	"PRFLAGS": "--vopt allow-unconstrained --vopt ccf=../src/gatemate.ccf",
 	"TOP": "soc",
       	"EXEPATH": "${config:TOOLCHAIN}/bin",

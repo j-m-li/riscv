@@ -35,6 +35,27 @@
         },
        	{
             "hide": true,
+            "label": "make riscv sym",
+            "type": "shell",
+            "linux": {
+                "command": "${config:IVL} ${config:IVLFLAGS} -o sim.vvp ${config:VLOG_SRC} ../src/soc_tb.v && ${config:VVP} -N sim.vvp -lx2 && ${config:GTKW} soc_tb.vcd ../src/config.gtkw"
+	    },
+            "osx": {
+                "command": "cc -o edit ${config:edit.src}"
+            },
+            "windows": {
+                "command": "cl /Fe: edit ${config:edit.src}"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}/build"
+            },
+	    "dependsOn": [
+                "make path"
+            ]
+        },
+
+       	{
+            "hide": true,
             "label": "make riscv",
             "type": "shell",
             "linux": {
@@ -51,6 +72,7 @@
             },
 	    "dependsOn": [
                 "make path",
+		"make riscv sym",
 		"make riscv impl"
             ]
         },
@@ -79,8 +101,9 @@
             "label": "make riscv synth",
             "type": "shell",
             "linux": {
-                "command1": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -json ${config:TOP}.json -vlog ${config:TOP}_synth.v; write_verilog -norename -noattr ${config:TOP}_ys.v'",
-                "command": "${config:YOSYS} -ql synth.log -p 'read_verilog -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -nomult  -json ${config:TOP}.json ; write_verilog -norename -noattr ${config:TOP}_ys.v'"
+                "commandq": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -json ${config:TOP}.json -vlog ${config:TOP}_synth.v; write_verilog -norename -noattr ${config:TOP}_ys.v'",
+                "command": "${config:YOSYS} -ql synth.log -p 'read_verilog -defer -sv ${config:VLOG_SRC}; synth_gatemate -top ${config:TOP} -luttree -nomx8 -json ${config:TOP}.json ; write_verilog -norename -noattr ${config:TOP}_ys.v'",
+                "command1": "${config:YOSYS} -Q -ql synth.log -s ../src/gatemate.ys"
 	    },
             "osx": {
                 "command": "cc -o edit ${config:edit.src}"

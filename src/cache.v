@@ -1,9 +1,11 @@
 
-module data_cache (
+module cache (
 	input	I_clk,     
 	input	I_rst,
 	input	[31:0] I_gpio,
-	output	reg [31:0] O_gpio,
+	output reg [31:0] O_gpio,
+	input	[31:0] I_iaddr,
+	output reg [31:0] O_idata,
 	input	[31:0] I_addr,
 	input  [31:0] I_data,
 	input  [3:0] I_mask,
@@ -15,6 +17,8 @@ module data_cache (
 reg [31:0] ram[0:16383];
 wire [31:0] data;
 wire [31:0] ram_data;
+reg [31:0] rom[0:4095];
+initial $readmemh("../src/rom.hex", rom);
 
 assign ram_data = ram[{2'h0,I_addr[31:2]}];
 assign data[7:0] = I_mask[0] ? I_data[7:0] : ram_data[7:0];
@@ -40,6 +44,7 @@ begin
 			O_data <= ram_data;
 		end
 	end
+	O_idata <= rom[{2'h0,I_iaddr[15:2]}];
 end
 
 endmodule

@@ -61,20 +61,21 @@ int main(int argc, char *argv[])
 	}
 	while (fread(c, 1, 4, in) == 4)
 	{
-		//fprintf(out, "16'h%04x: begin ", n, n); 
+		//fprintf(out, "16'h%04x: ", n, n); 
 	//	fprintf(out, "rom['h%04x] <= 8'h", n++); 
-		writeOut(out, c[0]);
-		fprintf(out, "\n");
-	//	fprintf(out, ";\nrom['h%04x] <= 8'h", n++); 
-		writeOut(out, c[1]);
-		fprintf(out, "\n");
+		//fprintf(out, "O_data <= 32'h", n); 
+		writeOut(out, c[3]);
+		//fprintf(out, "\n");
 	//	fprintf(out, ";\nrom['h%04x] <= 8'h", n++); 
 		writeOut(out, c[2]);
-		fprintf(out, "\n");
+		//fprintf(out, "\n");
 	//	fprintf(out, ";\nrom['h%04x] <= 8'h", n++); 
-		writeOut(out, c[3]);
+		writeOut(out, c[1]);
+		//fprintf(out, "\n");
+	//	fprintf(out, ";\nrom['h%04x] <= 8'h", n++); 
+		writeOut(out, c[0]);
 		fprintf(out, "\n");
-		n++;
+		n += 4;
 	}
 	fclose(in);
 	fclose(out);
