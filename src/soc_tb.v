@@ -23,6 +23,8 @@ module tb;
 
 	reg I_rst_btn = 0;
 	wire  O_led;
+	wire [31:0] IO_gpio;
+	wire [31:0] IO_addr;
 
 	initial begin
 `ifdef CCSDF
@@ -42,8 +44,8 @@ module tb;
 
 `ifndef BOB
 	initial begin
-		$monitor("a: %b ", O_led);
-		#10
+		$monitor("led: %b gpio:%h addr:%h", O_led, IO_gpio, IO_addr);
+		#1
 		I_rst_btn = 1;
 		#5
 
@@ -55,6 +57,8 @@ module tb;
 	soc dut(
 		.I_clk(I_clk),
 		.I_rst_btn(I_rst_btn),
+		.IO_gpio(IO_gpio),
+		.IO_addr(IO_addr),
 		.O_led(O_led)	
 	);
 `else

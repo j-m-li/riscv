@@ -14,37 +14,55 @@ module cache (
 	output reg O_stall
 );
 
-reg [31:0] ram[0:16383];
-wire [31:0] data;
-wire [31:0] ram_data;
+reg [7:0] ram0[0:16383];
+reg [7:0] ram1[0:16383];
+reg [7:0] ram2[0:16383];
+reg [7:0] ram3[0:16383];
 reg [31:0] rom[0:4095];
 initial $readmemh("../src/rom.hex", rom);
-
-assign ram_data = ram[{2'h0,I_addr[31:2]}];
-assign data[7:0] = I_mask[0] ? I_data[7:0] : ram_data[7:0];
-assign data[15:8] = I_mask[1] ? I_data[15:8] : ram_data[15:8];
-assign data[23:16] = I_mask[2] ? I_data[23:16] : ram_data[23:16];
-assign data[31:24] = I_mask[3] ? I_data[31:24] : ram_data[31:24];
 
 always @(posedge I_clk)
 begin
 	if (I_rst) begin
 		O_data <= 32'h00000000;
+		O_idata <= 32'h00000000;
 		O_gpio <= 32'h00000000;
 		O_stall <= 1;
 	end else begin
-		O_stall <= 0;
+		O_stall <= I_iaddr[31];
 		if (I_we) begin
 			if (I_addr == 0) begin
-				O_gpio <= data;
+				O_gpio <= I_data;
 			end else begin
-				ram[{2'h0,I_addr[31:2]}] <= data;
+				if (I_mask[0]) begin
+				       	ram0[{2'h0,I_addr[31:2]}] <=
+				       		I_data[7:0];
+				end
+				if (I_mask[1]) begin
+				       	ram1[{2'h0,I_addr[31:2]}] <=
+				       		I_data[15:8];
+				end
+				if (I_mask[2]) begin
+				       	ram2[{2'h0,I_addr[31:2]}] <=
+				       		I_data[23:16];
+				end
+			
+				if (I_mask[3]) begin
+				       	ram3[{2'h0,I_addr[31:2]}] <=
+				       		I_data[31:24];
+				end
 			end
+			O_data <= 32'h0;
 		end else begin
-			O_data <= ram_data;
+			O_data <= {
+				ram3[{2'h0,I_addr[31:2]}],
+				ram2[{2'h0,I_addr[31:2]}],
+				ram1[{2'h0,I_addr[31:2]}],
+				ram0[{2'h0,I_addr[31:2]}]
+				};
 		end
+		O_idata <= rom[{2'h0,I_iaddr[15:2]}];
 	end
-	O_idata <= rom[{2'h0,I_iaddr[15:2]}];
 end
 
 endmodule

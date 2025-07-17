@@ -38,7 +38,7 @@
             "label": "make riscv sym",
             "type": "shell",
             "linux": {
-                "command": "${config:IVL} ${config:IVLFLAGS} -o sim.vvp ${config:VLOG_SRC} ../src/soc_tb.v && ${config:VVP} -N sim.vvp -lx2 && ${config:GTKW} soc_tb.vcd ../src/config.gtkw"
+                "command": "${config:IVL} ${config:IVLFLAGS} -D SIM=SIM -o sim.vvp ${config:VLOG_SRC} ../src/soc_tb.v && ${config:VVP} -N sim.vvp -lx2 && ${config:GTKW} soc_tb.vcd ../src/config.gtkw"
 	    },
             "osx": {
                 "command": "cc -o edit ${config:edit.src}"
@@ -50,6 +50,7 @@
                 "cwd": "${workspaceFolder}/build"
             },
 	    "dependsOn": [
+                "make rom",
                 "make path"
             ]
         },

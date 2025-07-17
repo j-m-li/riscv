@@ -2,7 +2,11 @@
 module soc (
 	input	I_clk,     
 	input	I_rst_btn,
-	output	reg O_led
+`ifdef SIM
+	output	[31:0] IO_gpio,
+	output	[31:0] IO_addr,
+`endif
+	output	O_led
 );
 
 wire clk270, clk180, clk90, usr_ref_out,clk;
@@ -31,25 +35,6 @@ CC_PLL #(
 	);
 
 
-reg [3:0] cnt;
-initial cnt = 0;
-wire rst;
-assign rst = ~cnt[3];
-
-always @(posedge clk)
-begin
-	if (~I_rst_btn) begin
-		cnt <= 4'h0;
-		O_led <= 0;
-	end else if (rst) begin
-		cnt <= cnt + 1'h1;
-		O_led <= 1;
-	end else begin 
-		O_led <= !O_led;
-	end
-end
-
-
 wire [31:0] imem_addr;
 wire [31:0] imem_data;
 
@@ -61,6 +46,31 @@ wire dmem_we;
 wire mem_stall;
 wire [31:0] wgpio; 
 wire [31:0] rgpio = 0; 
+
+
+reg [3:0] cnt;
+initial cnt = 0;
+wire rst;
+assign rst = ~cnt[3];
+
+`ifdef SIM
+assign IO_gpio = dmem_wdata; 
+assign IO_addr = dmem_addr; 
+`endif
+assign O_led = dmem_we;
+
+always @(posedge clk)
+begin
+	if (~I_rst_btn) begin
+		cnt <= 4'h0;
+	end else if (rst) begin
+		cnt <= cnt + 1'h1;
+	end else begin 
+//		O_led <= imem_addr[2];
+	end
+end
+
+
 
 cache data (
 	.I_clk(clk),
@@ -81,6 +91,7 @@ cache data (
 riscv cpu (
 	.I_clk(clk),
 	.I_rst(rst),
+	.I_stall(mem_stall),
 	.O_imem_addr(imem_addr),
 	.I_imem_data(imem_data),
 	.O_dmem_addr(dmem_addr),

@@ -16,5 +16,7 @@ tb.O_led[0]
 tb.I_rst_btn[0]
 @29
 tb.I_clk[0]
+@23
+tb.IO_gpio[31:0]
 [pattern_trace] 1
 [pattern_trace] 0
