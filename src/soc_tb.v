@@ -50,7 +50,9 @@ module tb;
 		#5
 
 		#5 
-		#50
+		#100
+		I_rst_btn = 0;
+		#5 
 		$finish;
 
 	end
