@@ -21,6 +21,17 @@ reg [7:0] ram3[0:16383];
 reg [31:0] rom[0:4095];
 initial $readmemh("../src/rom.hex", rom);
 
+wire [31:0] data_addr;
+wire [31:0] data_addrn;
+reg [31:0] addr0;
+reg [31:0] addr1;
+reg [31:0] addr2;
+reg [31:0] addr3;
+reg [31:0] data;
+
+assign data_addr = I_addr;
+assign data_addrn = I_addr + 4;
+
 always @(posedge I_clk)
 begin
 	if (I_rst) begin
@@ -30,38 +41,94 @@ begin
 		O_stall <= 1;
 	end else begin
 		O_stall <= I_iaddr[31];
+		case (data_addr[1:0]) 
+		2'h0: begin
+			addr0 = data_addr;
+			addr1 = data_addr;
+			addr2 = data_addr;
+			addr3 = data_addr;
+			end
+		2'h1: begin
+			addr0 = data_addrn;
+			addr1 = data_addr;
+			addr2 = data_addr;
+			addr3 = data_addr;
+			end
+		2'h2: begin
+			addr0 = data_addrn;
+			addr1 = data_addrn;
+			addr2 = data_addr;
+			addr3 = data_addr;
+			end
+		2'h3: begin
+			addr0 = data_addrn;
+			addr1 = data_addrn;
+			addr2 = data_addrn;
+			addr3 = data_addr;
+			end
+		endcase
 		if (I_we) begin
 			if (I_addr == 0) begin
 				O_gpio <= I_data;
 			end else begin
-				if (I_mask[0]) begin
-				       	ram0[{2'h0,I_addr[31:2]}] <=
-				       		I_data[7:0];
-				end
-				if (I_mask[1]) begin
-				       	ram1[{2'h0,I_addr[31:2]}] <=
-				       		I_data[15:8];
-				end
-				if (I_mask[2]) begin
-				       	ram2[{2'h0,I_addr[31:2]}] <=
-				       		I_data[23:16];
-				end
-			
-				if (I_mask[3]) begin
-				       	ram3[{2'h0,I_addr[31:2]}] <=
-				       		I_data[31:24];
-				end
+				case(data_addr[1:0])
+				2'h0: begin
+					if (I_mask[0]) ram0[addr0[31:2]] <=
+				       			I_data[7:0];
+					if (I_mask[1]) ram1[addr1[31:2]] <=
+				       			I_data[15:8];
+					if (I_mask[2]) ram2[addr2[31:2]] <=
+				       			I_data[23:16];
+					if (I_mask[3]) ram3[addr3[31:2]] <=
+				       			I_data[31:24];
+					end
+				2'h1: begin
+					if (I_mask[0]) ram1[addr1[31:2]] <=
+				       			I_data[7:0];
+					if (I_mask[1]) ram2[addr2[31:2]] <=
+				       			I_data[15:8];
+					if (I_mask[2]) ram3[addr3[31:2]] <=
+				       			I_data[23:16];
+					if (I_mask[3]) ram0[addr0[31:2]] <=
+				       			I_data[31:24];
+					end
+				2'h2: begin
+					if (I_mask[0]) ram2[addr2[31:2]] <=
+				       			I_data[7:0];
+					if (I_mask[1]) ram3[addr3[31:2]] <=
+				       			I_data[15:8];
+					if (I_mask[2]) ram0[addr0[31:2]] <=
+				       			I_data[23:16];
+					if (I_mask[3]) ram1[addr1[31:2]] <=
+				       			I_data[31:24];
+					end
+				2'h3: begin
+					if (I_mask[0]) ram3[addr3[31:2]] <=
+				       			I_data[7:0];
+					if (I_mask[1]) ram0[addr0[31:2]] <=
+				       			I_data[15:8];
+					if (I_mask[2]) ram1[addr1[31:2]] <=
+				       			I_data[23:16];
+					if (I_mask[3]) ram2[addr2[31:2]] <=
+				       			I_data[31:24];
+					end
+				endcase
 			end
 			O_data <= 32'h0;
 		end else begin
-			O_data <= {
-				ram3[{2'h0,I_addr[31:2]}],
-				ram2[{2'h0,I_addr[31:2]}],
-				ram1[{2'h0,I_addr[31:2]}],
-				ram0[{2'h0,I_addr[31:2]}]
+			O_data = {
+				ram3[addr3[31:2]],
+				ram2[addr2[31:2]],
+				ram1[addr1[31:2]],
+				ram0[addr0[31:2]]
 				};
 		end
-		O_idata <= rom[{2'h0,I_iaddr[15:2]}];
+		// FIXME
+		if (I_addr < 1000) begin
+			O_idata <= rom[I_iaddr[15:2]];
+		end else begin
+			O_idata <= 32'h0;
+		end
 	end
 end
 

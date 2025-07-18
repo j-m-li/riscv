@@ -139,6 +139,8 @@ reg [6:0]  opcode_ex;
 reg [4:0]  rd_ex;
 reg [31:0] imm_u_ex;
 reg [31:0] pc_ex;
+reg [2:0]  funct3_ex;
+reg [31:0] dmem_addr_ex;
 
 wire [31:0] dmem_addr;
 reg [31:0] dmem_wdata;
@@ -229,16 +231,16 @@ always @(posedge I_clk) begin
 		if (opcode == 7'b0100011) begin
 			dmem_wdata = rv2;
 			if (funct3  == 4'b000) begin
-				O_dmem_wmask = 4'b0001 << dmem_addr[1:0]; // SB
+				O_dmem_wmask = 4'b0001; // SB
 			end else if (funct3  == 4'b001) begin
-				O_dmem_wmask = 4'b0011 << dmem_addr[1:0]; // SH
+				O_dmem_wmask = 4'b0011; // SH
 			end else begin
 				O_dmem_wmask = 4'b1111; // SW
 			end
 			O_dmem_wdata = rv2;
 			O_dmem_we = 1;
 			O_dmem_rd = 0;
-		end else if (opcode == 7'b0000011) begin
+		end else if (opcode == 7'b0000011) begin // LW
 			O_dmem_wdata = 32'h0;
 			O_dmem_wmask = 4'b0000;
 			O_dmem_rd = 1;
@@ -254,6 +256,8 @@ always @(posedge I_clk) begin
 	rd_ex = rd;
 	imm_u_ex = imm_u;
 	pc_ex = pc_id;
+	funct3_ex = funct3;
+	dmem_addr_ex = dmem_addr;
 end
 
 // stage 4: MEM memory access
@@ -263,13 +267,32 @@ reg [4:0]  rd_mem;
 reg [31:0] imm_u_mem;
 reg [31:0] pc_mem;
 reg [31:0] alu_out_mem;
-
+reg [31:0] rdata;
 always @(posedge I_clk) begin
         if (I_rst) begin
+		dmem_rdata = 32'h0;
 	end else begin
-		if (opcode_ex == 7'b0000011) begin
-			dmem_rdata = I_dmem_rdata; // Load
+		if (opcode_ex == 7'b0000011) begin // Load
+			case (dmem_addr_ex[1:0])
+			2'h0: rdata = I_dmem_rdata;
+			2'h1: rdata = {I_dmem_rdata[7:0],I_dmem_rdata[31:8]};
+			2'h2: rdata = {I_dmem_rdata[15:0],I_dmem_rdata[31:16]};
+			2'h3: rdata = {I_dmem_rdata[23:0],I_dmem_rdata[31:24]};
+			endcase
+			case (funct3_ex)
+			3'b000: dmem_rdata = // LB 
+				{{24{rdata[7]}}, rdata[7:0]}; 
+			3'b100: dmem_rdata = // LBU 
+				{24'h0, rdata[7:0]}; 
+			3'b001: dmem_rdata = // LH 
+				{{16{rdata[15]}}, rdata[15:0]}; 
+			3'b101: dmem_rdata = // LHU 
+				{16'h0, rdata[15:0]}; 
+			3'b010: dmem_rdata = rdata; // LW
+			default: dmem_rdata = 32'h0;
+			endcase
 		end else begin
+			dmem_rdata = 32'h0;
 		end
 	end
 	opcode_mem = opcode_ex;
