@@ -15,6 +15,10 @@
 //
 //
 
+// https://github.com/rolandbernard/kleine-riscv
+// https://chipmunklogic.com/digital-logic-design/designing-pequeno-risc-v-cpu-from-scratch-part-3-dealing-with-pipeline-hazards/
+// 
+
 module riscv (
     input          I_clk,        // Clock
     input          I_rst,        // Reset (synchronous, active high)
@@ -29,35 +33,51 @@ module riscv (
     output reg O_dmem_we     // Data memory write enable
 );
 
+// Hazard
+reg take_branch;
+reg [6:0]  opcode;
+
 // stage 1: IF instruction fetch
 reg [31:0] instr;
 reg [31:0] pc;
-reg [31:0] pc_if;
 reg [31:0] next_pc;
-wire stall;
-assign stall = I_stall;
+reg [31:0] pc_if;
 
+wire stall;
+assign stall = 0; //I_stall;
+reg invalidate_if;
+always @* begin
+	case (opcode)
+	7'b1101111: invalidate_if <= 1; // JAL
+	7'b1100111: invalidate_if <= 1; // JALR
+	7'b1100011: invalidate_if <= take_branch; // Branch
+	default: invalidate_if <= 0;
+	endcase
+end
 
 always @(posedge I_clk) begin
         if (I_rst) begin
+	$display("reset");
             	pc <= 32'h0;
 		instr <= 32'h0;
 		O_imem_addr <= 32'h0;
+        end else if (stall) begin
+        end else if (invalidate_if) begin
+		instr <= 32'h0;
+		pc <= next_pc;
+		O_imem_addr <= next_pc;
         end else begin
-		if (!stall) begin
-			pc <= next_pc;
-			O_imem_addr <= next_pc;
-		end else begin	
-			pc <= pc;
-		end
+		pc <= next_pc;
+		O_imem_addr <= next_pc;
 		instr <= I_imem_data;
         end
 	pc_if <= pc;
+	$display("I %h after %h stall:%h next_pc:%h", invalidate_if, pc, stall, next_pc);
 end
 
 // stage 2 : ID instruction decode and register fetch
 // ==== Instruction Decode Wires ====
-reg [6:0]  opcode;
+//reg [6:0]  opcode;
 reg [4:0]  rd;
 reg [2:0]  funct3;
 reg [4:0]  rs1;
@@ -76,23 +96,36 @@ reg [31:0] rv2;
 reg [4:0] shift_amount;
 
 reg [31:0] pc_id;
-integer i;
 
+reg  invalidate_id;
+always @(posedge I_clk)  begin
+	invalidate_id <= invalidate_if;
+end
+
+integer i;
 always @(posedge I_clk) begin
         if (I_rst) begin
 		rv1 <= 32'h0;
 		rv2 <= 32'h0;
+		opcode <= 7'h0;
+		rd <= 5'h0;
             	for (i = 0; i < 32; i = i+1) regfile[i] <= 0;
-        end else begin
+        end else if (stall) begin
+        end else if (invalidate_id || invalidate_if) begin
+		rv1 <= 32'h0;
+		rv2 <= 32'h0;
+		opcode <= 7'h0; 
+		rd <= 5'h0;
+	end else begin
     		// ==== Main Register Read ====
 		rv1 <= (instr[19:15] == 0) ? 32'b0 : regfile[instr[19:15]];
 		rv2 <= (instr[24:20] == 0) ? 32'b0 : regfile[instr[24:20]];
+		opcode <= instr[6:0];
+		rd <= instr[11:7];
         end
+	funct3 <= instr[14:12];
 	pc_id <= pc_if;
 	shift_amount <= instr[24:20]; 
-	opcode <= instr[6:0];
-	rd     <= instr[11:7];
-	funct3 <= instr[14:12];
 	rs1    <= instr[19:15];
 	rs2    <= instr[24:20];
 	funct7 <= instr[31:25];
@@ -143,7 +176,6 @@ reg [2:0]  funct3_ex;
 reg [31:0] dmem_addr_ex;
 
 reg [31:0] dmem_wmask;
-reg take_branch;
 
 always @* begin
 	case (funct3)
@@ -157,28 +189,55 @@ always @* begin
 	endcase
 end
 
+always @* begin
+        if (I_rst) begin
+        	next_pc <= 32'h0;
+	end else begin
+		next_pc <= (pc + 4);
+	 	case (opcode)
+		7'b1101111: begin
+				next_pc <= pc_ex + imm_j; //JAL
+			end
+		7'b1100111: begin
+			       	next_pc <= (rv1 + imm_i ) & ~1; //JALR
+			end
+        	7'b1100011: begin // Branch
+				if (take_branch) begin
+					next_pc <= pc_ex + imm_b;
+				end
+			end
+		endcase
+	end
+end
+
+reg  invalidate_ex;
+always @(posedge I_clk)  begin
+	invalidate_ex <= invalidate_id;
+end
+
 always @(posedge I_clk) begin
         if (I_rst) begin
         	alu_out <= 32'b0;
-        	next_pc <= 32'b0;
 		O_dmem_rd <= 0;
 		O_dmem_we <= 0;
 		O_dmem_wmask <= 4'b0000;
 		O_dmem_wdata <= 32'h0;
 		O_dmem_addr <= 32'h0;
+        end else if (stall) begin
+	end else if (invalidate_ex || invalidate_if) begin
+		opcode_ex <= 7'h0;
 	end else begin
 		O_dmem_wdata <= 32'h0;
 		O_dmem_wmask <= 4'b0000;
 		O_dmem_rd <= 0;
 		O_dmem_we <= 0;
 		alu_out <= 32'b0;
-		next_pc <= (pc + 4);
         	case (opcode)
 		7'b1101111: begin
-				next_pc <= pc_id + imm_j; //JAL
+				//JAL
 			end
 		7'b1100111: begin
-			       	next_pc <= (rv1 + imm_i ) & ~1; //JALR
+			       //JALR
 			end
             	7'b0110011: begin // R-type
                 	case ({funct7, funct3})
@@ -213,9 +272,7 @@ always @(posedge I_clk) begin
                 		endcase
             		end
 		7'b1100011: begin 
-				if (take_branch) begin
-					next_pc <= pc_id + imm_b;
-				end
+				// Branch
 			end
 		7'b0100011: begin
 				O_dmem_addr <= rv1 + imm_s;
@@ -240,22 +297,21 @@ always @(posedge I_clk) begin
 		default: begin
 			end
         	endcase
-	
+		opcode_ex <= opcode;
 	end
-	opcode_ex <= opcode;
 	rd_ex <= rd;
 	imm_u_ex <= imm_u;
 	pc_ex <= pc_id;
 	funct3_ex <= funct3;
 end
 
-// stage 4: MEM memory access
+// stage 4: MEM memory access and some stage 5: write back to registers
 reg [31:0] dmem_rdata;
 reg [6:0]  opcode_mem;
 reg [4:0]  rd_mem;
-reg [31:0] imm_u_mem;
-reg [31:0] pc_mem;
-reg [31:0] alu_out_mem;
+//reg [31:0] imm_u_mem;
+//reg [31:0] pc_mem;
+//reg [31:0] alu_out_mem;
 
 // FIXME for sorting bytes in unaligned LW/LH memory access (this should be 
 // in cache.v but it dosent compile with yosys...)
@@ -272,8 +328,11 @@ end
 always @(posedge I_clk) begin
         if (I_rst) begin
 		dmem_rdata <= 32'h0;
+        end else if (stall) begin
 	end else begin
-		if (opcode_ex == 7'b0000011) begin // Load
+		case (opcode_ex)
+		// Stage 4:
+		7'b0000011: begin // Load
 			case (funct3_ex)
 			3'b000: dmem_rdata <= // LB 
 				{{24{rdata[rdatai][7]}}, rdata[rdatai][7:0]}; 
@@ -286,31 +345,39 @@ always @(posedge I_clk) begin
 			3'b010: dmem_rdata <= rdata[rdatai]; // LW
 			default: dmem_rdata <= 32'h0;
 			endcase
-		end else begin
-			dmem_rdata <= 32'h0;
-		end
+			end 
+		// Stage 5: Write back
+        	7'b0110011: regfile[rd_ex] <= alu_out; // R-type
+        	7'b0010011: regfile[rd_ex] <= alu_out; // I-type ALU
+		7'b1101111: regfile[rd_ex] <= pc_ex + 4; //JAL
+		7'b1100111: regfile[rd_ex] <= pc_ex + 4; //JALR
+        	7'b0110111: regfile[rd_ex] <= imm_u_ex; // LUI
+        	7'b0010111: regfile[rd_ex] <= pc_ex + imm_u_ex; // AUIPC
+		default: dmem_rdata <= 32'h0;
+		endcase
 	end
 	opcode_mem <= opcode_ex;
 	rd_mem <= rd_ex;
-	imm_u_mem <= imm_u_ex;
-	pc_mem <= pc_ex;
-	alu_out_mem <= alu_out;
+	//imm_u_mem <= imm_u_ex;
+	//pc_mem <= pc_ex;
+	//alu_out_mem <= alu_out;
 end
 
 // stage 5: WB write back
 always @(posedge I_clk) begin
         if (I_rst) begin
+        end else if (stall) begin
 	end else begin 
 		case (opcode_mem)
-        	7'b0110011: regfile[rd_mem] <= alu_out_mem; // R-type
-        	7'b0010011: regfile[rd_mem] <= alu_out_mem; // I-type ALU
+        	//7'b0110011: regfile[rd_mem] <= alu_out_mem; // R-type
+        	//7'b0010011: regfile[rd_mem] <= alu_out_mem; // I-type ALU
 		7'b0000011: begin
 				regfile[rd_mem] <= dmem_rdata; // Loads
 			end
-		7'b1101111: regfile[rd_mem] <= pc_mem + 4; //JAL
-		7'b1100111: regfile[rd_mem] <= pc_mem + 4; //JALR
-        	7'b0110111: regfile[rd_mem] <= imm_u_mem; // LUI
-        	7'b0010111: regfile[rd_mem] <= pc_mem + imm_u_mem; // AUIPC
+		//7'b1101111: regfile[rd_mem] <= pc_mem + 4; //JAL
+		//7'b1100111: regfile[rd_mem] <= pc_mem + 4; //JALR
+        	//7'b0110111: regfile[rd_mem] <= imm_u_mem; // LUI
+        	//7'b0010111: regfile[rd_mem] <= pc_mem + imm_u_mem; // AUIPC
 		endcase
 	end
 end
